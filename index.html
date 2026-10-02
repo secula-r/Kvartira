@@ -302,13 +302,15 @@ function recView(x){const D=Array.from({length:7},(_,i)=>addDays(today(),i)).map
 function vWeek(){
  return `<h4>Меню на неделю</h4>`+Array.from({length:7},(_,i)=>addDays(today(),i)).map(d=>{const m=S.meals.find(x=>x.id===d)||{};
  return `<div class="card"><b>${dlabel(d)}</b><input data-m="text" data-id="${d}" placeholder="🍲 Что готовим?" maxlength="80" value="${esc(m.text||'')}" style="margin-top:8px"><input data-m="ing" data-id="${d}" placeholder="Продукты через запятую" maxlength="200" value="${esc(m.ing||'')}">${m.ing?`<button class="chip sm" data-a="mealShop" data-id="${d}">🧺 Продукты в покупки</button>`:''}</div>`}).join('')}
+const proj=d=>S.tasks.filter(t=>!t.done&&t.repeat&&t.repeat!=='none'&&t.repeat!=='after'&&t.date<d).filter(t=>{let x=t.date,g=0;while(x<d&&g++<800)x=nextDate(x,t.repeat);return x===d});
+const gr=t=>`<div class="row" style="opacity:.65;border:2px dashed var(--ln)"><span style="flex:none;width:32px;height:32px;border-radius:50%;border:2px dashed ${colr(t.assignee)}"></span><div class="tx" data-a="edit" data-id="${esc(t.id)}"><b>${esc(t.title)}</b><small><i style="background:${colr(t.assignee)}"></i>${esc(who(t.assignee))}${t.time?' · '+esc(t.time):''} · 🔁 ${esc((REP[t.repeat]||'').toLowerCase())}, по расписанию</small></div></div>`;
 function vCal(){const y=cm.getFullYear(),m=cm.getMonth(),off=(new Date(y,m,1).getDay()+6)%7,n=new Date(y,m+1,0).getDate();
  let c=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(x=>`<div class="h">${x}</div>`).join('')+'<button class="o"></button>'.repeat(off);
- for(let i=1;i<=n;i++){const d=y+'-'+pad(m+1)+'-'+pad(i),ts=S.tasks.filter(t=>t.date===d&&!t.done),cs=[...new Set(ts.map(t=>t.assignee))];
+ for(let i=1;i<=n;i++){const d=y+'-'+pad(m+1)+'-'+pad(i),ts=S.tasks.filter(t=>t.date===d&&!t.done),cs=[...new Set([...ts,...proj(d)].map(t=>t.assignee))];
   c+=`<button class="${d===today()?'t ':''}${d===sel?'s':''}" data-a="day" data-v="${d}">${i}<span class="dots">${cs.map(k=>`<i style="background:${colr(k)}"></i>`).join('')}</span></button>`}
  const dl=S.tasks.filter(t=>t.date===sel).sort((a,b)=>a.done-b.done);
  return `<div class="cn"><button data-a="mon" data-v="-1">‹</button><b>${cm.toLocaleDateString('ru',{month:'long',year:'numeric'})}</b><button data-a="mon" data-v="1">›</button></div><div class="cal">${c}</div>
- <h4>${dlabel(sel)}</h4>`+(dl.length?dl.map(row).join(''):'<div class="empty">Свободный день</div>')+`<button class="pri" data-a="add" data-d="${sel}">+ Задача на этот день</button>`}
+ <h4>${dlabel(sel)}</h4>`+(dl.length||proj(sel).length?dl.map(row).join('')+proj(sel).map(gr).join(''):'<div class="empty">Свободный день</div>')+`<button class="pri" data-a="add" data-d="${sel}">+ Задача на этот день</button>`}
 function vStats(){const ws=addDays(today(),-((new Date().getDay()+6)%7));
  const dn=k=>S.tasks.filter(t=>t.done&&t.doneBy===k&&(t.doneAt||'')>=ws).length,op=k=>S.tasks.filter(t=>!t.done&&(t.assignee===k||t.assignee==='both')).length;
  const bt=k=>S.shop.filter(x=>x.done&&x.boughtBy===k&&(x.boughtAt||'')>=ws).length;
@@ -345,14 +347,21 @@ function initCloud(){
  if(!FIREBASE_CONFIG.databaseURL){toast('Не указан адрес базы');return null}
  if(!/^[\w-]{12,60}$/.test(FAM)){famSheet();return null}
  const base=FIREBASE_CONFIG.databaseURL.replace(/\/+$/,'')+'/families/'+FAM,url=p=>base+(p?'/'+p:'')+'.json',subs=[];
- let last='',busy=false,bad=0;const clean=d=>JSON.parse(JSON.stringify(d));
+ let last='',busy=false,bad=0,rev=null,tick=0;const clean=d=>JSON.parse(JSON.stringify(d)),fail=()=>{if(++bad===2)toast('Нет связи с базой')};
+ /* полная загрузка данных */
  async function pull(){if(busy)return;busy=true;
-  try{const r=await fetch(url(''),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const d=(await r.json())||{},j=JSON.stringify(d);bad=0;if(j!==last){last=j;subs.forEach(f=>f(d))}}
-  catch(e){if(++bad===2)toast('Нет связи с базой')}busy=false}
- async function send(p,m,d){const r=await fetch(url(p),m==='PUT'?{method:m,body:JSON.stringify(clean(d))}:{method:m});if(!r.ok)throw new Error(r.status);busy=false;await pull()}
- setInterval(()=>{if(!document.hidden)pull()},4000);
+  try{const r=await fetch(url(''),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const d=(await r.json())||{},j=JSON.stringify(d);bad=0;rev=(d.meta||{}).rev||null;if(j!==last){last=j;subs.forEach(f=>f(d))}}
+  catch(e){fail()}busy=false}
+ /* лёгкая проверка: скачиваем только отметку изменений, а все данные — когда она поменялась (и раз в 5 минут на всякий случай) */
+ async function check(){if(busy)return;if(++tick%75===0)return pull();
+  try{const r=await fetch(url('meta/rev'),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const v=(await r.json())||null;bad=0;if(v!==rev)await pull()}
+  catch(e){fail()}}
+ async function send(p,m,d){const r=await fetch(url(p),m==='PUT'?{method:m,body:JSON.stringify(clean(d))}:{method:m});if(!r.ok)throw new Error(r.status);
+  try{await fetch(url('meta/rev'),{method:'PUT',body:JSON.stringify(Date.now()+'-'+Math.random().toString(36).slice(2,6))})}catch(e){}
+  busy=false;await pull()}
+ setInterval(()=>{if(!document.hidden)check()},4000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)pull()});
- return{collection:c=>({doc:id=>({set:d=>send(c+'/'+id,'PUT',d),delete:()=>send(c+'/'+id,'DELETE')}),
+ return{check,collection:c=>({doc:id=>({set:d=>send(c+'/'+id,'PUT',d),delete:()=>send(c+'/'+id,'DELETE')}),
    onSnapshot:cb=>{subs.push(d=>cb({docs:Object.entries(d[c]||{}).map(([id,x])=>({id,data:()=>x}))}));last='';pull()}}),
   doc:p=>({set:d=>send(p,'PUT',d),onSnapshot:cb=>{const[x,y]=p.split('/');subs.push(d=>{const v=(d[x]||{})[y];cb({exists:!!v,data:()=>v})});last='';pull()}})}}
 
