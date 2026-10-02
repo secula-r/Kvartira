@@ -3,8 +3,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Наша квартира</title>
 <meta name="theme-color" content="#e8742c">
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#f6f4ef;--card:#fff;--tx:#1f2a2e;--mu:#7a8589;--ln:#e6e2d9;--a:#1f9d8f;--b:#ee6a4f;--both:#7b6cd9;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -115,8 +113,8 @@ const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return ymd(d)};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const lsGet=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v??d}catch(e){return d}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
-let mealTab='week';
-let S={tasks:[],shop:[],rooms:[],meals:[],recipes:[],names:{a:'Настя',b:'Никита'}},db=null,roomF='all',roomsOpen=false;
+let mealTab='week',askedNames=false;
+let S={tasks:[],shop:[],rooms:[],meals:[],recipes:[],names:{a:'Первый',b:'Второй'}},db=null,roomF='all',roomsOpen=false;
 let me=lsGet('me',null),tab='tasks',filter='all',sel=today(),cm=new Date();cm.setDate(1);
 const other=k=>k==='a'?'b':'a';
 let AV={a:'🦊',b:'🐺'};
@@ -178,6 +176,9 @@ const act={
  mon(_,el){cm.setMonth(cm.getMonth()+Number(el.dataset.v));render()},
  profile(){profile()},
  backup(){backupSheet()},
+ names(){namesSheet()},
+ namesSave(){const a=$('#n-a').value.trim(),b=$('#n-b').value.trim();if(!a||!b){toast('Введите оба имени');return}
+  S.names={a,b};if(db){db.doc('meta/people').set(S.names).catch(()=>toast('Не удалось сохранить'))}else lsSet('names',S.names);render();if(me)close();else profile()},
  fam(){famSheet()},
  famGen(){const c='abcdefghjkmnpqrstuvwxyz23456789',a=new Uint8Array(16);crypto.getRandomValues(a);$('#fc').value=Array.from(a,x=>c[x%c.length]).join('')},
  famSave(){const v=$('#fc').value.trim();if(!/^[\w-]{12,60}$/.test(v)){toast('Код: от 12 символов, буквы, цифры, - и _');return}lsSet('fam',v);location.reload()},
@@ -243,9 +244,13 @@ async function importData(f){if(!f)return;let d;
   const t={};for(const k in o){const v=o[k];if(v===null||['string','number','boolean'].includes(typeof v))t[k]=v}
   await put(c,t);n++}
  toast('Восстановлено записей: '+n);close()}
+function namesSheet(){const v=k=>({a:'Первый',b:'Второй'}[k]===S.names[k]?'':esc(S.names[k]));
+ open(`<h3>👋 Как вас зовут?</h3><small>Имена видят оба. У каждой пары свой список и свои имена.</small><br><br>
+ <input id="n-a" placeholder="Первый (например, Настя)" maxlength="20" value="${v('a')}"><input id="n-b" placeholder="Второй (например, Никита)" maxlength="20" value="${v('b')}">
+ <button class="pri" data-a="namesSave">Сохранить</button>`)}
 function profile(){const E=['🦊','🐺','🦝','🐻','🐱','🦉','🐿️','🦔','🐰','🐧'];
  open(`<h3>Кто вы?</h3><small>Выберите, кто пользуется этим телефоном.</small><br><br>
- <div class="two"><button class="pri" data-a="setme" data-v="a" style="background:var(--a)">${AV.a} Я — ${esc(S.names.a)}</button><button class="pri" style="background:var(--b)" data-a="setme" data-v="b">${AV.b} Я — ${esc(S.names.b)}</button></div>
+ <div class="two"><button class="pri" data-a="setme" data-v="a" style="background:var(--a)">${AV.a} Я — ${esc(S.names.a)}</button><button class="pri" style="background:var(--b)" data-a="setme" data-v="b">${AV.b} Я — ${esc(S.names.b)}</button></div><button class="sec" data-a="names">✏️ Изменить имена</button>
  ${me?`<h4>Мой смайлик</h4><div class="chips">${E.map(e=>`<button class="chip${AV[me]===e?' on':''}" data-a="setav" data-v="${e}">${e}</button>`).join('')}</div><button class="sec" data-a="close">Готово</button>`:''}`)}
 
 /* ---- отрисовка ---- */
@@ -326,34 +331,41 @@ function render(){
    ВСТАВЬТЕ СЮДА настройки из консоли Firebase (Project settings → Your apps → Config).
    databaseURL берётся со страницы Realtime Database (вид https://ВАШ-ПРОЕКТ-default-rtdb....firebasedatabase.app). */
 const FIREBASE_CONFIG={
- apiKey:'ВСТАВЬТЕ_apiKey',
- authDomain:'',
- databaseURL:'',
- projectId:'',
- appId:''
+ apiKey:'AIzaSyBc9P-UNFhINkGVQHRt9KdmHDnIctqJcM8',
+ authDomain:'kvar-29127.firebaseapp.com',
+ databaseURL:'https://kvar-29127-default-rtdb.europe-west1.firebasedatabase.app',
+ projectId:'kvar-29127',
+ appId:'1:48505809460:web:c50d9eab8c3c8c61bcf861'
 };
 let FAM=lsGet('fam','');
 function famSheet(){open(`<h3>🔑 Код семьи</h3><small>Общий секретный код: по нему вы оба видите одни и те же данные. Придумайте длинный (от 12 символов) и введите одинаково на обоих телефонах.</small><br><br>
  <input id="fc" placeholder="например: lisa-kvartira-7f3k9x2" maxlength="60" value="${esc(FAM)}"><button class="chip sm" data-a="famGen">🎲 Придумать</button><br><br>
  <button class="pri" data-a="famSave">Подключить</button>`)}
 function initCloud(){
- if(!window.firebase||!FIREBASE_CONFIG.databaseURL||/ВСТАВЬТЕ/.test(FIREBASE_CONFIG.apiKey)){toast('Firebase не настроен');return null}
+ if(!FIREBASE_CONFIG.databaseURL){toast('Не указан адрес базы');return null}
  if(!/^[\w-]{12,60}$/.test(FAM)){famSheet();return null}
- try{firebase.initializeApp(FIREBASE_CONFIG)}catch(e){return null}
- const R=p=>firebase.database().ref('families/'+FAM+'/'+p),clean=d=>JSON.parse(JSON.stringify(d));
- return{collection:c=>({doc:id=>({set:d=>R(c+'/'+id).set(clean(d)),delete:()=>R(c+'/'+id).remove()}),
-   onSnapshot:(cb,er)=>R(c).on('value',sn=>cb({docs:Object.entries(sn.val()||{}).map(([id,d])=>({id,data:()=>d}))}),er)}),
-  doc:p=>({set:d=>R(p).set(clean(d)),onSnapshot:(cb,er)=>R(p).on('value',sn=>cb({exists:sn.exists(),data:()=>sn.val()}),er)})}}
+ const base=FIREBASE_CONFIG.databaseURL.replace(/\/+$/,'')+'/families/'+FAM,url=p=>base+(p?'/'+p:'')+'.json',subs=[];
+ let last='',busy=false,bad=0;const clean=d=>JSON.parse(JSON.stringify(d));
+ async function pull(){if(busy)return;busy=true;
+  try{const r=await fetch(url(''),{cache:'no-store'});if(!r.ok)throw new Error(r.status);const d=(await r.json())||{},j=JSON.stringify(d);bad=0;if(j!==last){last=j;subs.forEach(f=>f(d))}}
+  catch(e){if(++bad===2)toast('Нет связи с базой')}busy=false}
+ async function send(p,m,d){const r=await fetch(url(p),m==='PUT'?{method:m,body:JSON.stringify(clean(d))}:{method:m});if(!r.ok)throw new Error(r.status);busy=false;await pull()}
+ setInterval(()=>{if(!document.hidden)pull()},4000);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)pull()});
+ return{collection:c=>({doc:id=>({set:d=>send(c+'/'+id,'PUT',d),delete:()=>send(c+'/'+id,'DELETE')}),
+   onSnapshot:cb=>{subs.push(d=>cb({docs:Object.entries(d[c]||{}).map(([id,x])=>({id,data:()=>x}))}));last='';pull()}}),
+  doc:p=>({set:d=>send(p,'PUT',d),onSnapshot:cb=>{const[x,y]=p.split('/');subs.push(d=>{const v=(d[x]||{})[y];cb({exists:!!v,data:()=>v})});last='';pull()}})}}
 
 /* ---- запуск ---- */
 (async()=>{
- S.tasks=lsGet('tasks',[]);S.shop=lsGet('shop',[]);S.rooms=lsGet('rooms',[]);S.meals=lsGet('meals',[]);S.recipes=lsGet('recipes',[]);AV=lsGet('av',AV);render();if(!me)profile();
+ S.tasks=lsGet('tasks',[]);S.shop=lsGet('shop',[]);S.rooms=lsGet('rooms',[]);S.meals=lsGet('meals',[]);S.recipes=lsGet('recipes',[]);AV=lsGet('av',AV);S.names=lsGet('names',S.names);render();if(!me)profile();
  db=initCloud();
  if(!db)return;S.tasks=[];S.shop=[];S.rooms=[];S.meals=[];S.recipes=[];
  const er=()=>toast('Нет доступа к общим данным');
  db.collection('tasks').onSnapshot(s=>{S.tasks=s.docs.map(d=>({id:d.id,...d.data()}));render()},er);
  db.collection('shop').onSnapshot(s=>{S.shop=s.docs.map(d=>({id:d.id,...d.data()}));render()},er);
  db.collection('recipes').onSnapshot(s=>{S.recipes=s.docs.map(d=>({id:d.id,...d.data()}));render()},er);
+ db.doc('meta/people').onSnapshot(s=>{if(s.exists){const v=s.data();S.names={a:v.a||'Первый',b:v.b||'Второй'}}else if(!askedNames){askedNames=true;namesSheet()}render()},er);
  db.doc('meta/avatars').onSnapshot(s=>{if(s.exists){const v=s.data();AV={a:v.a||AV.a,b:v.b||AV.b}}render()},er);
  db.collection('meals').onSnapshot(s=>{S.meals=s.docs.map(d=>({id:d.id,...d.data()}));render()},er);
  db.collection('rooms').onSnapshot(s=>{S.rooms=s.docs.map(d=>({id:d.id,...d.data()}));render()},er);
